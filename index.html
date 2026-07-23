@@ -218,6 +218,8 @@
     display: none;
     gap: 10px;
     flex-direction: column;
+    max-height: 360px;
+    overflow-y: auto;
   }
   .theme-questions-preview.visible { display: flex; }
   .preview-q {
@@ -418,7 +420,9 @@
 
 <script>
 // ══════════════════════════════════════════════
-//  QUESTION BANK  (4 themes × 3 questions each)
+//  QUESTION BANK  (4 themes × 8 questions each)
+//  8 per theme = max participant count (8), so a
+//  single ladder run never repeats a question.
 // ══════════════════════════════════════════════
 
 const THEMES = [
@@ -433,6 +437,11 @@ const THEMES = [
       { title: 'Animal Conversation',  text: 'If you woke up tomorrow with the ability to speak to animals, which animal would you talk to first and what would you ask them?' },
       { title: 'Time Travel Briefing', text: 'If you could travel back in time and meet your 10-years-ago self for exactly 60 seconds, what crucial piece of advice would you give?' },
       { title: 'Superpower Dilemma',   text: 'If you had to choose between the ability to fly or the ability to become invisible for one full day, which one would you pick and why?' },
+      { title: 'Superhero Team',       text: 'If you could recruit any three fictional characters to join your team for a day, who would you pick and what mission would you send them on?' },
+      { title: 'Object Swap',          text: 'If you woke up and could switch places with any object in this room for 24 hours, which one would you choose and why?' },
+      { title: 'Weather Control',      text: 'If you could control the weather for one entire week, what would you do with that power?' },
+      { title: 'Museum Exhibit',       text: 'If your life so far became a museum exhibit, what would the title be and what would be the centerpiece?' },
+      { title: 'New Sense',            text: 'If you could gain a sixth sense of your choosing, what would it be and how would you use it?' },
     ]
   },
   {
@@ -446,6 +455,11 @@ const THEMES = [
       { title: 'Passion vs. Wealth',    text: 'Would you rather have your dream job but earn barely enough to get by, or work a job you dislike but become incredibly wealthy?' },
       { title: 'Process vs. Outcome',   text: 'Which is more valuable: working relentlessly toward a goal and failing, or achieving instant success through a shortcut?' },
       { title: 'Rules vs. Speed',       text: 'Would you prefer to work with a teammate who strictly follows every rule but works slowly, or a teammate who cuts corners but delivers results fast?' },
+      { title: 'City vs. Nature',       text: 'Would you rather live the rest of your life in a bustling city or in a quiet place surrounded by nature?' },
+      { title: 'Fame vs. Privacy',      text: 'Would you rather be famous and admired by strangers, or unknown but deeply respected by the people closest to you?' },
+      { title: 'Knowledge vs. Skill',   text: 'Would you rather instantly know everything about a subject, or have to practice for years to master it yourself?' },
+      { title: 'Past vs. Future',       text: 'If you could only choose one, would you rather be able to visit the past or glimpse the future?' },
+      { title: 'Comfort vs. Growth',    text: 'Would you rather stay in a comfortable routine forever, or face constant challenges that push you to grow?' },
     ]
   },
   {
@@ -459,6 +473,11 @@ const THEMES = [
       { title: 'Proudest Moment',       text: 'What is a recent challenge or new hobby you took on that made you feel incredibly proud of yourself?' },
       { title: 'The Best Gift',         text: 'Looking back at your life, what is the most meaningful or memorable gift you have ever received from someone?' },
       { title: 'Lessons from Mistakes', text: 'We all make mistakes. What is one major blunder you made that taught you a valuable life lesson?' },
+      { title: 'Turning Point',         text: 'Can you share a moment in your life when a small decision ended up changing everything?' },
+      { title: 'Unexpected Kindness',   text: 'What is a time when a stranger\u2019s small act of kindness made a big difference in your day?' },
+      { title: 'Comfort Food or Place', text: 'What is your go-to comfort food or place when you\u2019re having a rough day, and why does it help?' },
+      { title: 'Childhood Dream',       text: 'What did you want to be when you were a child, and how close is your life today to that dream?' },
+      { title: 'Small Wins',            text: 'What is a recent small win that you didn\u2019t tell anyone about but were secretly proud of?' },
     ]
   },
   {
@@ -472,6 +491,11 @@ const THEMES = [
       { title: 'On Failure',       text: 'Thomas Edison said, "I have not failed. I\'ve just found 10,000 ways that won\'t work." Do you agree with this mindset?' },
       { title: 'The Social Path',  text: 'An African proverb says: "If you want to go fast, go alone. If you want to go far, go together." Which path reflects your current life journey?' },
       { title: 'Unseen Freedom',   text: 'What would you do differently in your life if you knew absolutely no one was judging you?' },
+      { title: 'On Change',        text: 'Heraclitus said that change is the only constant in life. How do you personally cope with unexpected change?' },
+      { title: 'On Courage',       text: 'Nelson Mandela said he learned that courage was not the absence of fear, but the triumph over it. When did you last triumph over fear?' },
+      { title: 'On Wasted Time',   text: 'Writer Marthe Troly-Curtin said time you enjoy wasting is not wasted time. Do you agree, and what does that look like for you?' },
+      { title: 'On Simplicity',    text: 'Leonardo da Vinci said simplicity is the ultimate sophistication. Where in your life could you use more simplicity?' },
+      { title: 'On Resilience',    text: 'A Japanese proverb says: fall seven times, stand up eight. What is a time you had to stand back up after falling?' },
     ]
   }
 ];
@@ -608,34 +632,46 @@ $('btn-generate').addEventListener('click', () => {
 });
 
 $('btn-reset-ladder').addEventListener('click', () => {
-  // Keep same names+questions, just regenerate the rung layout
+  // Keep same names, but re-pick questions (fresh shuffle) and rung layout
+  readNamesAndPickQuestions(true);
   buildLadderUI();
 });
 
 /**
- * Reads name inputs and randomly assigns questions from the selected theme.
- * If n > number of theme questions, questions are re-used (shuffled & cycled).
+ * Reads name inputs and randomly assigns UNIQUE questions from the selected
+ * theme's pool. Since every theme now has 8 questions (>= max participants),
+ * no question is ever repeated within a single ladder run.
+ * If a theme's pool were ever smaller than n, we still avoid back-to-back
+ * duplicates by cycling only after every question has been used once.
  */
-function readNamesAndPickQuestions() {
+function readNamesAndPickQuestions(keepNames) {
   const n = state.n;
   const theme = THEMES.find(t => t.id === state.selectedThemeId);
 
   // Names
-  state.names = [];
-  for (let i = 0; i < n; i++) {
-    const v = ($(`pname-${i}`).value.trim());
-    state.names.push(v || ['A','B','C','D','E','F','G','H'][i]);
+  if (!keepNames) {
+    state.names = [];
+    for (let i = 0; i < n; i++) {
+      const v = ($(`pname-${i}`).value.trim());
+      state.names.push(v || ['A','B','C','D','E','F','G','H'][i]);
+    }
   }
 
-  // Questions: shuffle the pool, then cycle if n > pool size
+  // Questions: shuffle the full pool, then take the first n WITHOUT repeats.
+  // Only if n exceeds the pool size do we start a second shuffled pass.
   const pool = [...theme.questions];
   shuffle(pool);
+
   state.questions = [];
-  for (let i = 0; i < n; i++) {
-    state.questions.push(pool[i % pool.length]);
+  let cursor = 0;
+  while (state.questions.length < n) {
+    if (cursor >= pool.length) {
+      shuffle(pool);      // reshuffle before starting a new pass
+      cursor = 0;
+    }
+    state.questions.push(pool[cursor]);
+    cursor++;
   }
-  // Shuffle once more to break cycling pattern if n > pool
-  shuffle(state.questions);
 }
 
 // ══════════════════════════════════════════════
